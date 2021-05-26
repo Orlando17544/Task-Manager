@@ -1,0 +1,1124 @@
+#!/bin/bash
+
+UNDERLINE=`tput smul` 
+NOUNDERLINE=`tput rmul`
+BOLD=`tput bold`
+NORMAL=`tput sgr0`
+
+PURPLE_FORE='\033[0;35m' 
+LIGHT_PURPLE_FORE='\033[1;35m' 
+BLUE_FORE='\033[0;34m'
+LIGHT_BLUE_FORE='\033[1;34m'
+CYAN_FORE='\033[0;36m'
+LIGHT_CYAN_FORE='\033[1;36m'
+GREEN_FORE='\033[0;32m'
+LIGHT_GREEN_FORE='\033[1;32m'
+ORANGE_FORE='\033[0;33m' 
+LIGHT_ORANGE_FORE='\033[1;33m' 
+RED_FORE='\033[0;31m'
+LIGHT_RED_FORE='\033[1;31m'
+DARK_GRAY_FORE='\033[1;30m'
+NC='\033[0m' # No color
+
+LIGHT_BLUE_BACK='\033[1;44m'
+BLUE_BACK='\033[0;44m'
+LIGHT_RED_BACK='\033[1;41m'
+RED_BACK='\033[0;41m'
+
+readStorage() { 
+	tasks="$(grep -Po '^[^º]+' ~/bin/taskManagerData)"
+	nextId="$(grep -Po '\d+(?=º)' ~/bin/taskManagerData)"
+}
+
+updateData () {
+	#Delete subTasks
+	tasksUnpacked="$(echo -n "$tasks" | grep -Po '(?<=½).*(?=⅛)')"
+
+	tasksWithoutSubtasksUnpacked="$(echo -n "$tasksUnpacked" | perl -p -e "s/½(?:[^½⅛]|[¦¬¤ª]|(?>(?R)))*⅛/^Comp/g")"
+
+	#Put tasks in an array
+	todosUnpacked="$(echo -n "$tasksWithoutSubtasksUnpacked" | grep -Po '(?<=¦).*?(?=¦)')"
+	IFS=$'ª' read -a todosArray <<< "$todosUnpacked"
+
+	doingsUnpacked="$(echo -n "$tasksWithoutSubtasksUnpacked" | grep -Po '(?<=¬).*?(?=¬)')"
+	IFS=$'ª' read -a doingsArray <<< "$doingsUnpacked"
+
+	donesUnpacked="$(echo -n "$tasksWithoutSubtasksUnpacked" | grep -Po '(?<=¤).*?(?=¤)')"
+	IFS=$'ª' read -a donesArray <<< "$donesUnpacked"
+}
+
+classify () {
+	if [[ "$1" == externalFactor ]]; then
+		classificationColor="${ORANGE_FORE}"
+	elif [[ "$1" == unchecked ]]; then
+		classificationColor="${PURPLE_FORE}"
+	elif [[ "$1" == without ]]; then
+		classificationColor="${NC}"
+	fi
+}
+
+printFrontend () {
+	#Orientation is vertical by default
+
+	clear
+
+	#To know the size of the terminal
+	local columns="$(tput cols)"
+	local lines="$(tput lines)"
+
+	local numberCharactersDecoration="$(((columns-14)/2))"
+	local numberSpacesToDo="$(((columns-5)/2))"
+	local spacesToDo="$(eval "for i in {1..${numberSpacesToDo}}; do printf "%1s" " "; done")"
+	local numberSpacesDoing="$(((columns-5)/2))"
+	local spacesDoing="$(eval "for i in {1..${numberSpacesDoing}}; do printf "%1s" " "; done")"
+	local numberSpacesDone="$(((columns-4)/2))"
+	local spacesDone="$(eval "for i in {1..${numberSpacesDone}}; do printf "%1s" " "; done")"
+	local numberNewLines="$(((lines-10)/3))"
+	local newLines="$(eval "for i in {1..${numberNewLines}}; do printf "\\\\\\\\n" ""; done")"
+	spaces="$(eval "for i in {1..${columns}}; do printf "%1s" " "; done")"
+
+	#Print headers
+	printf "${LIGHT_ORANGE_FORE}%-.${numberCharactersDecoration}s" '@-_-@ .. @-.-@ .. @>.<@ @-_-@ .. @-.-@ .. @>.<@ @-_-@ .. @-.-@ .. @>.<@ @-_-@ .. @-.-@ .. @>.<@ '
+	printf " Task Manager "
+	printf "%-.${numberCharactersDecoration}s${NC}\n" '@-_-@ .. @-.-@ .. @>.<@ @-_-@ .. @-.-@ .. @>.<@ @-_-@ .. @-.-@ .. @>.<@ @-_-@ .. @-.-@ .. @>.<@ '
+	
+	#To print the directory
+	numberElement=1
+	currentDirectory="/"
+
+	for previousId in "${previousIdsArray[@]}"; do
+		if [[ "$numberElement" -eq "${#previousIdsArray[@]}" ]]; then
+			currentDirectory="$currentDirectory$previousId"
+		else
+			currentDirectory="$currentDirectory$previousId/"
+		fi
+		numberElement="$((numberElement+1))"
+	done
+
+	printf "%-${columns}.${columns}s\n" "$currentDirectory"
+
+	local numberSpacesTitle
+	local spacesTitle
+	#To change title
+	if [[ "${#previousIdsArray[@]}" -eq 0 ]]; then
+		numberSpacesTitle="$(((columns-${#fileName})/2))"
+		spacesTitle="$(eval "for i in {1..${numberSpacesTitle}}; do printf "%1s" " "; done")"
+		printf "$spacesTitle${UNDERLINE}${BOLD}%-1s${NORMAL}${NOUNDERLINE}\n" "$fileName"
+	else
+		numberSpacesTitle="$(((columns-${#currentTask})/2))"
+		spacesTitle="$(eval "for i in {1..${numberSpacesTitle}}; do printf "%1s" " "; done")"
+		printf "$spacesTitle${UNDERLINE}${BOLD}%-1s${NORMAL}${NOUNDERLINE}\n" "$currentTask"
+	fi
+
+	local columnsTask
+	local columnsNote
+
+	#To show/hide note
+	if ! $visibleNote; then
+		columnsTask="$((columns-(4+10+4+4+6)))"
+		printf "${BOLD}%-4s| %-10s| %-4s| %-${columnsTask}s${NORMAL}\n" Id Date Type Task
+	else
+		columnsNote="$((columns-(4+4+2)))"
+		printf "${BOLD}%-4s| %-${columnsNote}s${NORMAL}\n" Id Note
+	fi
+
+	#Print to dos
+	local numberNewLinesTodo="$((numberNewLines-${#todosArray[@]}))"
+
+	local newLinesTodo
+
+	#If toDo section is full
+	if [[ "$numberNewLinesTodo" -le 0 ]]; then
+		newLinesTodo=""
+	else
+		newLinesTodo="$(eval "for i in {1..${numberNewLinesTodo}}; do printf "\\\\\\\\n" ""; done")"
+	fi
+
+	#If there is no tasks
+	if [[ "${#todosArray[@]}" -eq 0 ]]; then
+		printf "$spacesToDo${BOLD}%-5s\n$newLinesTodo${NORMAL}" "To do"
+	else
+		printf "$spacesToDo${BOLD}%-5s\n${NORMAL}" "To do"
+	fi
+
+	local numberElement=1
+
+	unset currentIdsArray
+
+	local dateColor
+
+	for todoTask in "${todosArray[@]}"; do
+
+		local id="$(echo -n "$todoTask" | cut -f 1 -d '^')"
+		local classification="$(echo -n "$todoTask" | cut -f 4 -d '^')"
+
+		currentIdsArray+=($id)
+
+		classify "$classification"
+
+		local rows
+
+		if ! $visibleNote; then
+			local secondsDate="$(echo -n "$todoTask" | cut -f 2 -d '^')"
+			local date="$(date --date="@$secondsDate" +%F)"
+			local task="$(echo -n "$todoTask" | cut -f 3 -d '^')"
+			local component="$(echo -n "$todoTask" | cut -f 6 -d '^')"
+
+
+			local secondsCurrent="$(date +%s)"
+
+			minutesTotalLeft=$(((secondsDate - secondsCurrent)/60))
+
+			local hoursTotalLeft=$((minutesTotalLeft/60))
+
+			if [[ "$hoursTotalLeft" -ge 720 ]]; then
+				dateColor=${PURPLE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 655 ]]; then
+				dateColor=${LIGHT_PURPLE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 589 ]]; then
+				dateColor=${BLUE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 524 ]]; then
+				dateColor=${LIGHT_BLUE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 458 ]]; then
+				dateColor=${CYAN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 393 ]]; then
+				dateColor=${LIGHT_CYAN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 327 ]]; then
+				dateColor=${GREEN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 262 ]]; then
+				dateColor=${LIGHT_GREEN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 196 ]]; then
+				dateColor=${ORANGE_FORE}
+			elif [[ "$hoursTotalLeft" -ge 131 ]]; then
+				dateColor=${LIGHT_ORANGE_FORE}
+			elif [[ "$hoursTotalLeft" -ge 65 ]]; then
+				dateColor=${RED_FORE}
+			elif [[ "$hoursTotalLeft" -ge 0 ]]; then
+				dateColor=${LIGHT_RED_FORE}
+			else 
+				dateColor=${DARK_GRAY_FORE}
+			fi
+
+			rows="%04d| ${dateColor}%-10s${NC}| %-4s| ${classificationColor}%-${columnsTask}s${NC}\n"
+
+			if [[ "$component" == "" ]]; then
+				component=Leaf
+			fi
+
+			if [[ "$numberElement" -eq "${#todosArray[@]}" ]]; then
+				printf "$rows$newLinesTodo" "$id" "$date" "$component" "$task"
+			else
+				printf "$rows" "$id" "$date" "$component" "$task"
+			fi
+
+		else
+			local note="$(echo -n "$todoTask" | cut -f 5 -d '^')"
+
+			rows="%04d| ${classificationColor}%-${columnsNote}s${NC}\n"
+
+			if [[ "$numberElement" -eq "${#todosArray[@]}" ]]; then
+				printf "$rows$newLinesTodo" "$id" "$note"
+			else
+				printf "$rows" "$id" "$note"
+			fi
+
+		fi
+
+		numberElement="$((numberElement+1))"
+			
+	done
+
+	#Print doings
+	local numberNewLinesDoing="$((numberNewLines-${#doingsArray[@]}))"
+
+	local newLinesDoing
+
+	#If doing section is full
+	if [[ "$numberNewLinesDoing" -le 0 ]]; then
+		newLinesDoing=""
+	else
+		newLinesDoing="$(eval "for i in {1..${numberNewLinesDoing}}; do printf "\\\\\\\\n" ""; done")"
+	fi
+
+	#If there is no tasks
+	if [[ "${#doingsArray[@]}" -eq 0 ]]; then
+		printf "$spacesDoing${BOLD}%-5s\n$newLinesDoing${NORMAL}" "Doing"
+	else
+		printf "$spacesDoing${BOLD}%-5s\n${NORMAL}" "Doing"
+	fi
+
+	numberElement=1
+	
+	for doingTask in "${doingsArray[@]}"; do
+
+		local id="$(echo -n "$doingTask" | cut -f 1 -d '^')"
+		local classification="$(echo -n "$doingTask" | cut -f 4 -d '^')"
+
+		currentIdsArray+=($id)
+
+		classify "$classification"
+
+		local rows
+
+		if ! $visibleNote; then
+			local secondsDate="$(echo -n "$doingTask" | cut -f 2 -d '^')"
+			local date="$(date --date="@$secondsDate" +%F)"
+			local task="$(echo -n "$doingTask" | cut -f 3 -d '^')"
+			local component="$(echo -n "$doingTask" | cut -f 6 -d '^')"
+
+			local secondsCurrent="$(date +%s)"
+
+			minutesTotalLeft=$(((secondsDate - secondsCurrent)/60))
+
+			local hoursTotalLeft=$((minutesTotalLeft/60))
+
+			if [[ "$hoursTotalLeft" -ge 720 ]]; then
+				dateColor=${PURPLE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 655 ]]; then
+				dateColor=${LIGHT_PURPLE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 589 ]]; then
+				dateColor=${BLUE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 524 ]]; then
+				dateColor=${LIGHT_BLUE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 458 ]]; then
+				dateColor=${CYAN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 393 ]]; then
+				dateColor=${LIGHT_CYAN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 327 ]]; then
+				dateColor=${GREEN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 262 ]]; then
+				dateColor=${LIGHT_GREEN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 196 ]]; then
+				dateColor=${ORANGE_FORE}
+			elif [[ "$hoursTotalLeft" -ge 131 ]]; then
+				dateColor=${LIGHT_ORANGE_FORE}
+			elif [[ "$hoursTotalLeft" -ge 65 ]]; then
+				dateColor=${RED_FORE}
+			elif [[ "$hoursTotalLeft" -ge 0 ]]; then
+				dateColor=${LIGHT_RED_FORE}
+			else 
+				dateColor=${DARK_GRAY_FORE}
+			fi
+
+			rows="%04d| ${dateColor}%-10s${NC}| %-4s| ${classificationColor}%-${columnsTask}s${NC}\n"
+
+			if [[ "$component" == "" ]]; then
+				component=Leaf
+			fi
+
+			if [[ "$numberElement" -eq "${#doingsArray[@]}" ]]; then
+				printf "$rows$newLinesDoing" "$id" "$date" "$component" "$task"
+			else
+				printf "$rows" "$id" "$date" "$component" "$task"
+			fi
+
+		else
+			local note="$(echo -n "$doingTask" | cut -f 5 -d '^')"
+
+			rows="%04d| ${classificationColor}%-${columnsNote}s${NC}\n"
+
+			if [[ "$numberElement" -eq "${#doingsArray[@]}" ]]; then
+				printf "$rows$newLinesDoing" "$id" "$note"
+			else
+				printf "$rows" "$id" "$note"
+			fi
+
+		fi
+
+		numberElement="$((numberElement+1))"
+
+	done
+
+	#Print dones
+	local numberNewLinesDone="$((numberNewLines-${#donesArray[@]}))"
+
+	local newLinesDone
+
+	#If done section is full
+	if [[ "$numberNewLinesDone" -le 0 ]]; then
+		newLinesDone=""
+	else
+		newLinesDone="$(eval "for i in {1..${numberNewLinesDone}}; do printf "\\\\\\\\n" ""; done")"
+	fi
+
+	#If there is no tasks
+	if [[ "${#donesArray[@]}" -eq 0 ]]; then
+		printf "$spacesDone${BOLD}%-5s\n$newLinesDone${NORMAL}" "Done"
+	else
+		printf "$spacesDone${BOLD}%-5s\n${NORMAL}" "Done"
+	fi
+
+	numberElement=1
+
+	for doneTask in "${donesArray[@]}"; do
+
+		local id="$(echo -n "$doneTask" | cut -f 1 -d '^')"
+		local classification="$(echo -n "$doneTask" | cut -f 4 -d '^')"
+
+		currentIdsArray+=($id)
+
+		classify "$classification"
+
+		local rows
+
+		if ! $visibleNote; then
+			local secondsDate="$(echo -n "$doneTask" | cut -f 2 -d '^')"
+			local date="$(date --date="@$secondsDate" +%F)"
+			local task="$(echo -n "$doneTask" | cut -f 3 -d '^')"
+			local component="$(echo -n "$doneTask" | cut -f 6 -d '^')"
+
+			local secondsCurrent="$(date +%s)"
+
+			minutesTotalLeft=$(((secondsDate - secondsCurrent)/60))
+
+			local hoursTotalLeft=$((minutesTotalLeft/60))
+
+			if [[ "$hoursTotalLeft" -ge 720 ]]; then
+				dateColor=${PURPLE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 655 ]]; then
+				dateColor=${LIGHT_PURPLE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 589 ]]; then
+				dateColor=${BLUE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 524 ]]; then
+				dateColor=${LIGHT_BLUE_FORE} 
+			elif [[ "$hoursTotalLeft" -ge 458 ]]; then
+				dateColor=${CYAN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 393 ]]; then
+				dateColor=${LIGHT_CYAN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 327 ]]; then
+				dateColor=${GREEN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 262 ]]; then
+				dateColor=${LIGHT_GREEN_FORE}
+			elif [[ "$hoursTotalLeft" -ge 196 ]]; then
+				dateColor=${ORANGE_FORE}
+			elif [[ "$hoursTotalLeft" -ge 131 ]]; then
+				dateColor=${LIGHT_ORANGE_FORE}
+			elif [[ "$hoursTotalLeft" -ge 65 ]]; then
+				dateColor=${RED_FORE}
+			elif [[ "$hoursTotalLeft" -ge 0 ]]; then
+				dateColor=${LIGHT_RED_FORE}
+			else 
+				dateColor=${DARK_GRAY_FORE}
+			fi
+
+			rows="%04d| ${dateColor}%-10s${NC}| %-4s| ${classificationColor}%-${columnsTask}s${NC}\n"
+
+			if [[ "$component" == "" ]]; then
+				component=Leaf
+			fi
+
+			if [[ "$numberElement" -eq "${#donesArray[@]}" ]]; then
+				printf "$rows$newLinesDone" "$id" "$date" "$component" "$task"
+			else
+				printf "$rows" "$id" "$date" "$component" "$task"
+			fi
+
+		else
+			local note="$(echo -n "$doneTask" | cut -f 5 -d '^')"
+
+			rows="%04d| ${classificationColor}%-${columnsNote}s${NC}\n"
+
+			if [[ "$numberElement" -eq "${#donesArray[@]}" ]]; then
+				printf "$rows$newLinesDone" "$id" "$note"
+			else
+				printf "$rows" "$id" "$note"
+			fi
+
+		fi
+
+		numberElement="$((numberElement+1))"
+
+	done
+
+	#Print lines available
+	local numberNewLinesAvailable="$((lines-(${#todosArray[@]}+numberNewLinesTodo + ${#doingsArray[@]}+numberNewLinesDoing + ${#donesArray[@]}+numberNewLinesDone + 10)))"
+
+	if [[ "$numberNewLinesAvailable" -gt 0 ]]; then
+		eval "for i in {1..${numberNewLinesAvailable}}; do printf "\\\\n" ""; done"
+	fi	
+
+	#Print options
+	local columnsOptions="$(echo $(((columns-(9+9+9+10+17+13))/5)))"
+
+	printf "${BOLD}%-$((9+columnsOptions))s%-$((9+columnsOptions))s%-$((9+columnsOptions))s%-$((10+columnsOptions))s%-$((17+columnsOptions))s%-13s${NORMAL}\n" "1. Create" "3. Modify" "5. Note" "7. Go task" "9. Save directory" "11. Go parent"
+	printf "${BOLD}%-$((9+columnsOptions))s%-$((9+columnsOptions))s%-$((9+columnsOptions))s%-$((10+columnsOptions))s%-$((17+columnsOptions))s%-13s${NORMAL}\n" "2. Delete" "4. Move" "6. Update" "8. Go root" "10. Go directory" "12. Help"
+
+}
+
+askDate () {
+	echo -en "${BLUE_BACK}$spaces\r${NC}"
+	read -p "$(echo -en "${LIGHT_BLUE_BACK}What year, month and day? ${BLUE_BACK}")" year month day
+	echo -en "${NC}\033[T\033[2K\033[3J\r"
+	secondsGoal=$(date --date="$year-$month-$day" +%s 2> /dev/null)
+	secondsCurrent="$(date +%s)"
+	while [[ "$secondsGoal" -lt "$secondsCurrent" || ! "$year" =~ ^[0-9]+$ || ! "$month" =~ ^[0-9]+$ || ! "$day" =~ ^[0-9]+$ ]]; do
+		if [[ ! "$year" =~ ^[0-9]+$ || ! "$month" =~ ^[0-9]+$ || ! "$day" =~ ^[0-9]+$ ]]; then
+			echo -en "${RED_BACK}$spaces\r${NC}"
+			echo -en "${LIGHT_RED_BACK}Invalid entry${NC}"
+			sleep 3
+			echo -en "\033[2K\r"
+		else 
+			echo -en "${RED_BACK}$spaces\r${NC}"
+			echo -en "${LIGHT_RED_BACK}That date has passed ${NC}"
+			sleep 3
+			echo -en "\033[2K\r"
+		fi
+		echo -en "${BLUE_BACK}$spaces\r${NC}"
+		read -p "$(echo -en "${LIGHT_BLUE_BACK}What year, month and day? ${BLUE_BACK}")" year month day
+		echo -en "${NC}\033[T\033[2K\033[3J\r"
+		secondsGoal=$(date --date="$year-$month-$day" +%s 2> /dev/null)
+		secondsCurrent="$(date +%s)"
+	done
+}
+
+verifyInput () {
+	correctInput=true
+	if [[ "$1" =~ ½ ]]; then
+		correctInput=false	
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Can't insert ½${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+	elif [[ "$1" =~ ⅛ ]]; then
+		correctInput=false
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Can't insert ⅛${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+	elif [[ "$1" =~ ¦ ]]; then
+		correctInput=false
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Can't insert ¦${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+	elif [[ "$1" =~ ¬ ]]; then
+		correctInput=false
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Can't insert ¬${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+	elif [[ "$1" =~ ¤ ]]; then
+		correctInput=false
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Can't insert ¤${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+	elif [[ "$1" =~ ª ]]; then
+		correctInput=false
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Can't insert ª${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+	elif [[ "$1" =~ \^ ]]; then
+		correctInput=false
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Can't insert ^${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+	elif [[ "$1" =~ º ]]; then
+		correctInput=false
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Can't insert º${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+	fi
+}
+
+askTask () {
+	task=""
+	while [[ ! "$task" =~ ^.{5,}$ ]]; do
+		echo -en "${BLUE_BACK}$spaces\r${NC}"
+		read -p "$(echo -en "${LIGHT_BLUE_BACK}What task? ${BLUE_BACK}")" task
+		echo -en "${NC}\033[T\033[2K\033[3J\r"
+		verifyInput "$task"
+		if ! $correctInput; then
+			task=""
+		fi
+	done
+}
+
+askTypeTask () {
+	echo -en "${BLUE_BACK}$spaces\r${NC}"	
+	read -p "$(echo -en "${LIGHT_BLUE_BACK}What kind of task (toDo/doing/done) ? ${BLUE_BACK}")" typeTask
+	echo -en "${NC}\033[T\033[2K\033[3J\r"
+	while [[ "$typeTask" != toDo && "$typeTask" != doing && "$typeTask" != done ]]; do
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Incorrect kind${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+		echo -en "${BLUE_BACK}$spaces\r${NC}"	
+		read -p "$(echo -en "${LIGHT_BLUE_BACK}What kind of task (toDo/doing/done) ? ${BLUE_BACK}")" typeTask
+		echo -en "${NC}\033[T\033[2K\033[3J\r"
+	done
+}
+
+askClassification () {
+	echo -en "${BLUE_BACK}$spaces\r${NC}"	
+	read -p "$(echo -en "${LIGHT_BLUE_BACK}What classification (externalFactor/unchecked/without) ? ${BLUE_BACK}")" classification
+	echo -en "${NC}\033[T\033[2K\033[3J\r"
+	while [[ "$classification" != externalFactor && "$classification" != altogether && "$classification" != without ]]; do
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Incorrect classification${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+		echo -en "${BLUE_BACK}$spaces\r${NC}"	
+		read -p "$(echo -en "${LIGHT_BLUE_BACK}What classification (externalFactor/altogether/without) ? ${BLUE_BACK}")" classification
+		echo -en "${NC}\033[T\033[2K\033[3J\r"
+	done
+}
+
+askNote () {
+	correctInput=false
+	while ! "$correctInput"; do
+		echo -en "${BLUE_BACK}$spaces\r${NC}"
+		read -p "$(echo -en "${LIGHT_BLUE_BACK}What note? ${BLUE_BACK}")" note
+		echo -en "${NC}\033[T\033[2K\033[3J\r"
+		verifyInput "$note"
+	done
+}
+
+create () {
+	#Algorithm:
+	#Get subtasks
+	#Delete subtasks
+	#Add task
+	#Put subtasks
+
+	askDate
+	askTask
+	askTypeTask
+	askClassification
+	askNote
+
+	#Get subtasks
+	local subTasks="$(echo -n "$tasksUnpacked" | grep -Po '½(?>[^½⅛]|(?R))*⅛')" 
+
+	IFS=$'\n' read -a subTasksArray -d '' <<< "$subTasks"
+
+	#Delete subtasks
+	local tasksWithoutSubtasks="½${tasksWithoutSubtasksUnpacked}⅛"
+	local tasksWithoutSubtasksNew
+
+	#Add task
+	if [[ "$typeTask" == toDo ]]; then
+		#If there is no todos
+		if [[ "$tasksWithoutSubtasks" =~ ¦¦ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¦¬/$nextId^$secondsGoal^$task^$classification^$note¦¬/")"
+		elif [[ ! "$tasksWithoutSubtasks" =~ ¦¦ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¦¬/ª$nextId^$secondsGoal^$task^$classification^$note¦¬/")"
+		fi
+	elif [[ "$typeTask" == doing ]]; then
+		#If there is no doings
+		if [[ "$tasksWithoutSubtasks" =~ ¬¬ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¬¤/$nextId^$secondsGoal^$task^$classification^$note¬¤/")"
+		elif [[ ! "$tasksWithoutSubtasks" =~ ¬¬ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¬¤/ª$nextId^$secondsGoal^$task^$classification^$note¬¤/")"
+		fi
+	elif [[ "$typeTask" == done ]]; then
+		#If there is no dones
+		if [[ "$tasksWithoutSubtasks" =~ ¤¤ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¤⅛/$nextId^$secondsGoal^$task^$classification^$note¤⅛/")"
+		elif [[ ! "$tasksWithoutSubtasks" =~ ¤¤ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¤⅛/ª$nextId^$secondsGoal^$task^$classification^$note¤⅛/")"
+		fi
+	fi
+
+	#Put subtasks
+	local tasksNew="$tasksWithoutSubtasksNew"
+
+	for subTask in "${subTasksArray[@]}"; do
+
+		#If subTask has nothing, ^Comp is inserted everywhere
+		if [[ ! "$subTask" == "" ]]; then
+
+			#https://www.regular-expressions.info/replacecharacters.html?wlr=1
+			subTask="$(echo -n "$subTask" | perl -p -e 's/\$/\\\$/g' | perl -p -e 's/\\/\\\\/g')"
+
+			#Do not put double quotes around $subTask
+			tasksNew="$(echo -n "$tasksNew" |  perl -p -e "s/\^Comp/$subTask/")"
+		fi
+
+	done
+
+	local tasksNewModified="$(echo -n "$tasksNew" | perl -p -e 's/\$/\\\$/g' | perl -p -e 's/\\/\\\\/g')"
+
+	perl -p -i -e "s/\Q$tasks\E/$tasksNewModified/" ~/bin/taskManagerData
+	tasks="$tasksNew"
+
+	#To know if there is only one id
+	grep -P 'ºid\^\d+º' ~/bin/taskManagerData &> /dev/null
+
+	if [[ "$?" -eq 0 ]]; then
+		nextId="$((nextId+1))"
+		perl -p -i -e "s/(?<=ºid\^)\d+/$nextId/" ~/bin/taskManagerData
+	elif [[ "$?" -eq 1 ]]; then
+		perl -p -i -e "s/\^\d+(?=º)//" ~/bin/taskManagerData	
+		nextId="$(grep -Po '\d+(?=º)' ~/bin/taskManagerData)"
+	fi
+
+	if $emptyTasks; then
+		emptyTasks=false
+	fi
+
+	updateData
+	printFrontend
+
+}
+
+askId () {
+	echo -en "${BLUE_BACK}$spaces\r${NC}"
+	read -p "$(echo -en "${LIGHT_BLUE_BACK}What is the id of the task you want to $1? ${BLUE_BACK}")" id
+	echo -en "${NC}\033[T\033[2K\033[3J\r"
+	correctId=false
+	if [[ "$id" =~ ^[0-9]+$ ]]; then
+		for idElement in "${currentIdsArray[@]}"; do
+			if [[ "$id" -eq "$idElement" ]]; then
+				correctId=true
+			fi
+		done
+	fi
+	while ! $correctId; do
+		if [[ ! "$id" =~ ^[0-9]+$ ]]; then
+			echo -en "${RED_BACK}$spaces\r${NC}"
+			echo -en "${LIGHT_RED_BACK}Invalid entry${NC}"
+			sleep 3
+			echo -en "\033[2K\r"
+		elif [[ "$id" =~ ^[0-9]+$ ]]; then
+			echo -en "${RED_BACK}$spaces\r${NC}"
+			echo -en "${LIGHT_RED_BACK}Id doesn't exist ${NC}"
+			sleep 3
+			echo -en "\033[2K\r"
+		fi
+		echo -en "${BLUE_BACK}$spaces\r${NC}"
+		read -p "$(echo -en "${LIGHT_BLUE_BACK}What is the id of the task you want to $1? ${BLUE_BACK}")" id
+		echo -en "${NC}\033[T\033[2K\033[3J\r"
+		if [[ "$id" =~ ^[0-9]+$ ]]; then
+			for idElement in "${currentIdsArray[@]}"; do
+				if [[ "$id" -eq "$idElement" ]]; then
+					correctId=true
+				fi
+			done
+		fi
+	done
+}
+
+delete () {
+	askId delete
+
+	local regex
+
+	#Regex to know if has subtasks
+	echo -n "$tasks" | grep -P "[¦¬¤ª]$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*½" &> /dev/null
+
+	#It has subtasks
+	if [[ "$?" -eq 0 ]]; then
+		#To select all ids
+		recycledIds="$(echo -n "$tasks" | grep -Po "[¦¬¤ª]$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|(?1))*⅛)" | grep -Po '(?<=[¦¬¤ª])\d+(?=\^)')"
+		IFS=$'\n' read -a recycledIdsArray -d '' <<< "$recycledIds"
+		#Recycle all ids
+		for recycledId in "${recycledIdsArray[@]}"; do
+			perl -p -i -e "s/(?<=\d)º/\^$recycledIdº/" ~/bin/taskManagerData
+		done
+			
+		#To know if is in front
+		echo -n "$tasks" | grep -P "[¦¬¤]$id\^" &> /dev/null
+		#If it is in front
+		if [[ "$?" -eq 0 ]]; then
+			#Regex to know if ª exists
+			echo -n "$tasks" | grep -P "[¦¬¤]$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|(?1))*⅛)ª" &> /dev/null
+
+			#ª exists
+			if [[ "$?" -eq 0 ]]; then
+				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?:[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)ª"
+				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+			#ª doesn't exist
+			elif [[ "$?" -eq 1 ]]; then
+				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?:[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)"
+				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+			fi
+		#It's in the middle or back
+		elif [[ "$?" -eq 1 ]]; then
+			regex="ª$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)"
+			tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
+			perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+		fi
+	#It doesn't have subtasks
+	elif [[ "$?" -eq 1 ]]; then
+		#Recycle id
+		perl -p -i -e "s/(?<=\d)º/\^$idº/" ~/bin/taskManagerData
+
+		#To know if is in front
+		echo -n "$tasks" | grep -P "[¦¬¤]$id\^" &> /dev/null
+		#If it is in front
+		if [[ "$?" -eq 0 ]]; then
+			#Regex to know if ª exists
+			echo -n "$tasks" | grep -P "[¦¬¤]$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*ª" &> /dev/null
+			#ª exists
+			if [[ "$?" -eq 0 ]]; then
+				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^ª]*ª"
+				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"	
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+			#ª doesn't exist
+			elif [[ "$?" -eq 1 ]]; then
+				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤]*"
+				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+			fi
+		#It's in the middle or back
+		elif [[ "$?" -eq 1 ]]; then
+			regex="ª$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*"
+			tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"	
+			perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+		fi
+	fi
+
+	nextId="$id"
+
+	#To know if tasks is empty
+	echo -n "$tasks" | grep -P '½¦¦¬¬¤¤⅛(?!º)'
+
+	#It's empty
+	if [[ "$?" -eq 0 ]]; then
+		emptyTasks=true
+	fi
+
+	updateData
+	printFrontend
+}
+
+askField () {
+	echo -en "${BLUE_BACK}$spaces\r${NC}"	
+	read -p "$(echo -en "${LIGHT_BLUE_BACK}What field (date/task/classification/note) ? ${BLUE_BACK}")" field
+	echo -en "${NC}\033[T\033[2K\033[3J\r"
+	while [[ "$field" != date && "$field" != task && "$field" != classification && "$field" != note ]]; do
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Incorrect field${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
+		echo -en "${BLUE_BACK}$spaces\r${NC}"	
+		read -p "$(echo -en "${LIGHT_BLUE_BACK}What field (date/task/classification/note) ? ${BLUE_BACK}")" field
+		echo -en "${NC}\033[T\033[2K\033[3J\r"
+	done
+}
+
+modify () {
+	askId modify
+	askField
+
+	local regex
+	local replacement
+
+	if [[ "$field" == date ]]; then
+		askDate
+		regex="(?<=[¦¬¤ª])($id)\^\d+\^"
+		replacement="\1^$secondsGoal^"
+	elif [[ "$field" == task ]]; then
+		askTask
+		regex="(?<=[¦¬¤ª])($id)\^(\d+)\^[^\^]+\^"
+		replacement="\1^\2^$task^"
+	elif [[ "$field" == classification ]]; then
+		askClassification
+		regex="(?<=[¦¬¤ª])($id)\^(\d+)\^([^\^]+)\^\w+\^"
+		replacement="\1^\2^\3^$classification^"
+	elif [[ "$field" == note ]]; then
+		askNote
+		regex="(?<=[¦¬¤ª])($id)\^(\d+)\^([^\^]+)\^(\w+)\^[^½¦¬¤ª]*"
+		replacement="\1^\2^\3^\4^$note"
+	fi
+
+	tasks="$(echo -n "$tasks" | perl -p -e "s/$regex/$replacement/")"	
+	perl -p -i -e "s/$regex/$replacement/" ~/bin/taskManagerData
+
+	updateData
+	printFrontend
+
+}
+
+move () {
+	#Algorithm:
+	#Extract task to move (Get and delete task to move)
+	#Get subtasks
+	#Delete subtasks
+	#Add task
+	#Put subtasks
+
+	askId move
+	askTypeTask
+
+	#Extract task to move
+	local regex
+	local taskToMove
+
+	#Regex to know if has subtasks
+	echo -n "$tasks" | grep -P "[¦¬¤ª]$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*½" &> /dev/null
+
+	#It has subtasks
+	if [[ "$?" -eq 0 ]]; then
+		echo -n "$tasks" | grep -P "[¦¬¤]$id\^" &> /dev/null
+		#If it is in front
+		if [[ "$?" -eq 0 ]]; then
+			#Regex to know if ª exists
+			echo -n "$tasks" | grep -P "[¦¬¤]$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|(?1))*⅛)ª" &> /dev/null
+
+			#ª exists
+			if [[ "$?" -eq 0 ]]; then
+				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?:[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)ª"
+				taskToMove="$(echo -n "$tasks" | grep -Po "$regex" | perl -p -e 's/ª$//')"
+				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+			#ª doesn't exist
+			elif [[ "$?" -eq 1 ]]; then
+				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?:[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)"
+				taskToMove="$(echo -n "$tasks" | grep -Po "$regex")"
+				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+			fi
+		#It's in the middle or back
+		elif [[ "$?" -eq 1 ]]; then
+			regex="ª$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)"
+			taskToMove="$(echo -n "$tasks" | grep -Po "$regex" | perl -p -e 's/^ª//')"
+			tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
+			perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+		fi
+	#It doesn't have subtasks
+	elif [[ "$?" -eq 1 ]]; then
+		echo -n "$tasks" | grep -P "[¦¬¤]$id\^" &> /dev/null
+		#If it is in front
+		if [[ "$?" -eq 0 ]]; then
+			#Regex to know if ª exists
+			echo -n "$tasks" | grep -P "[¦¬¤]$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*ª" &> /dev/null
+			#ª exists
+			if [[ "$?" -eq 0 ]]; then
+				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^ª]*ª"
+				taskToMove="$(echo -n "$tasks" | grep -Po "$regex" | perl -p -e 's/ª$//')"
+				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"	
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+			#ª doesn't exist
+			elif [[ "$?" -eq 1 ]]; then
+				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤]*"
+				taskToMove="$(echo -n "$tasks" | grep -Po "$regex")"
+				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+			fi
+		#It's in the middle or back
+		elif [[ "$?" -eq 1 ]]; then
+			regex="ª$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*"
+			taskToMove="$(echo -n "$tasks" | grep -Po "$regex" | perl -p -e 's/^ª//')"
+			tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"	
+			perl -p -i -e "s/$regex//" ~/bin/taskManagerData
+		fi
+	fi
+
+	#To get tasksUnpacked without "task to move"
+	updateData
+
+	#Get subtasks
+	local subTasks="$(echo -n "$tasksUnpacked" | grep -Po '½(?>[^½⅛]|(?R))*⅛')" 
+
+	IFS=$'\n' read -a subTasksArray -d '' <<< "$subTasks"
+
+	#Delete subtasks
+	local tasksWithoutSubtasks="½${tasksWithoutSubtasksUnpacked}⅛"
+	local tasksWithoutSubtasksNew
+
+	#Add task
+	if [[ "$typeTask" == toDo ]]; then
+		#If there is no todos
+		if [[ "$tasksWithoutSubtasks" =~ ¦¦ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¦¬/$taskToMove¦¬/")"
+		elif [[ ! "$tasksWithoutSubtasks" =~ ¦¦ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¦¬/ª$taskToMove¦¬/")"
+		fi
+	elif [[ "$typeTask" == doing ]]; then
+		#If there is no doings
+		if [[ "$tasksWithoutSubtasks" =~ ¬¬ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¬¤/$taskToMove¬¤/")"
+		elif [[ ! "$tasksWithoutSubtasks" =~ ¬¬ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¬¤/ª$taskToMove¬¤/")"
+		fi
+	elif [[ "$typeTask" == done ]]; then
+		#If there is no dones
+		if [[ "$tasksWithoutSubtasks" =~ ¤¤ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¤⅛/$taskToMove¤⅛/")"
+		elif [[ ! "$tasksWithoutSubtasks" =~ ¤¤ ]]; then
+			tasksWithoutSubtasksNew="$(echo -n "$tasksWithoutSubtasks" | perl -p -e "s/¤⅛/ª$taskToMove¤⅛/")"
+		fi
+	fi
+
+	#Put subtasks
+	local tasksNew="$tasksWithoutSubtasksNew"
+
+	for subTask in "${subTasksArray[@]}"; do
+
+		#If subTask has nothing, ^Comp is inserted everywhere
+		if [[ ! "$subTask" == "" ]]; then
+
+			#https://www.regular-expressions.info/replacecharacters.html?wlr=1
+			subTask="$(echo -n "$subTask" | perl -p -e 's/\$/\\\$/g' | perl -p -e 's/\\/\\\\/g')"
+
+			#Do not put double quotes around $subTask
+			tasksNew="$(echo -n "$tasksNew" |  perl -p -e "s/\^Comp/$subTask/")"
+		fi
+
+	done
+
+	local tasksNewModified="$(echo -n "$tasksNew" | perl -p -e 's/\$/\\\$/g' | perl -p -e 's/\\/\\\\/g')"
+
+	perl -p -i -e "s/\Q$tasks\E/$tasksNewModified/" ~/bin/taskManagerData
+	tasks="$tasksNew"
+
+	updateData
+	printFrontend
+}
+
+goTask () {
+	askId go
+
+	previousIdsArray+=($id)
+
+	currentTask="$(echo -n "$tasks" | grep -Po "(?<=[¦¬¤ª])$id\^\d+\^[^\^]+\^" | cut -f 3 -d '^')"
+
+	#Regex to know if has subtasks
+	echo -n "$tasks" | grep -P "[¦¬¤ª]$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*½" &> /dev/null
+
+	#It has subtasks
+	if [[ "$?" -eq 0 ]]; then
+		#Select only subtask
+		tasks="$(echo -n "$tasks" | grep -Po "(?<=[¦¬¤ª])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|(?1))*⅛)" | grep -Po "½(?>[^½⅛]|(?R))*⅛")"
+	#It doesn't have subtasks
+	elif [[ "$?" -eq 1 ]]; then
+		tasks="½¦¦¬¬¤¤⅛"
+		perl -p -i -e "s/(?<=[¦¬¤ª])($id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*)([¦¬¤ª])/\1$tasks\2/" ~/bin/taskManagerData
+		emptyTasks=true
+	fi
+
+	updateData
+	printFrontend
+}
+
+goParent () {
+	if $emptyTasks; then
+		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData
+		emptyTasks=false
+	fi
+
+	if [[ "${#previousIdsArray[@]}" -eq 1 ]]; then
+		readStorage
+		unset previousIdsArray
+	else
+		local ultimateIndex="$(( ${#previousIdsArray[@]} - 1 ))"
+
+		previousIdsArray=("${previousIdsArray[@]:0:$ultimateIndex}")
+
+		ultimateIndex="$(( ${#previousIdsArray[@]} - 1 ))"
+		
+		id="${previousIdsArray[$ultimateIndex]}"
+
+		tasks="$(grep -Po "(?<=[¦¬¤ª])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|(?1))*⅛)" ~/bin/taskManagerData | grep -Po "½(?>[^½⅛]|(?R))*⅛")"
+		
+		currentTask="$(grep -Po "(?<=[¦¬¤ª])$id\^\d+\^[^\^]+\^" ~/bin/taskManagerData | cut -f 3 -d '^')"
+	fi
+	
+	updateData
+	printFrontend
+}
+
+goRoot() {
+	if $emptyTasks; then
+		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData
+		emptyTasks=false
+	fi
+
+	readStorage
+	unset previousIdsArray
+
+	updateData
+	printFrontend
+}
+
+goDirectory () {
+	if $emptyTasks; then
+		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData
+		emptyTasks=false
+	fi
+}
+
+showNote () {
+	if ! $visibleNote; then
+		visibleNote=true
+	else
+		visibleNote=false
+	fi
+
+	printFrontend
+}
+
+update () {
+	printFrontend
+}
+
+atBeginning () {
+	if [[ ! -e ~/bin/taskManagerData ]]; then
+		echo -n "½¦¦¬¬¤¤⅛ºid^0º" > ~/bin/taskManagerData
+	fi
+
+	readStorage
+	updateData
+	printFrontend
+
+	beginning=false
+}
+
+beginning=true
+
+emptyTasks=false
+
+visibleNote=false
+
+fileName="name"
+
+exitSIGINT () {
+	if $emptyTasks; then
+		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData
+		emptyTasks=false
+	fi
+	exit 0
+}
+
+trap exitSIGINT SIGINT
+
+while true; do
+	if $beginning; then
+		atBeginning
+	fi
+	echo -en "${BLUE_BACK}$spaces\r${NC}"
+	read -p "$(echo -en "${LIGHT_BLUE_BACK}Enter selection [1-12] > ${BLUE_BACK}")" selection
+	echo -en "${NC}\033[T\033[2K\033[3J\r"
+        if [[ "$selection" -eq 1 ]]; then
+		create
+	elif [[ "$selection" -eq 2 ]]; then
+		delete
+	elif [[ "$selection" -eq 3 ]]; then
+		modify
+	elif [[ "$selection" -eq 4 ]]; then
+		move
+	elif [[ "$selection" -eq 5 ]]; then
+		showNote
+	elif [[ "$selection" -eq 6 ]]; then
+		update
+	elif [[ "$selection" -eq 7 ]]; then
+		goTask
+	elif [[ "$selection" -eq 8 ]]; then
+		goRoot
+	elif [[ "$selection" -eq 9 ]]; then
+		echo "9"
+	elif [[ "$selection" -eq 10 ]]; then
+		echo "10"
+	elif [[ "$selection" -eq 11 ]]; then
+		goParent
+	elif [[ "$selection" -eq 12 ]]; then
+		echo "12"
+	fi
+done
