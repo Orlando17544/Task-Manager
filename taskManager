@@ -521,6 +521,12 @@ verifyInput () {
 		echo -en "${LIGHT_RED_BACK}Can't insert º${NC}"
 		sleep 3
 		echo -en "\033[2K\r"
+	elif [[ "$1" =~ ^Comp$ ]]; then
+		correctInput=false
+		echo -en "${RED_BACK}$spaces\r${NC}"
+		echo -en "${LIGHT_RED_BACK}Can't insert Comp${NC}"
+		sleep 3
+		echo -en "\033[2K\r"
 	fi
 }
 
@@ -635,7 +641,7 @@ create () {
 			subTask="$(echo -n "$subTask" | perl -p -e 's/\$/\\\$/g' | perl -p -e 's/\\/\\\\/g')"
 
 			#Do not put double quotes around $subTask
-			tasksNew="$(echo -n "$tasksNew" |  perl -p -e "s/\^Comp/$subTask/")"
+			tasksNew="$(echo -n "$tasksNew" |  perl -p -e "s/\^Comp(?=[¦¬¤ª])/$subTask/")"
 		fi
 
 	done
@@ -959,7 +965,7 @@ move () {
 			subTask="$(echo -n "$subTask" | perl -p -e 's/\$/\\\$/g' | perl -p -e 's/\\/\\\\/g')"
 
 			#Do not put double quotes around $subTask
-			tasksNew="$(echo -n "$tasksNew" |  perl -p -e "s/\^Comp/$subTask/")"
+			tasksNew="$(echo -n "$tasksNew" |  perl -p -e "s/\^Comp(?=[¦¬¤ª])/$subTask/")"
 		fi
 
 	done
