@@ -561,7 +561,7 @@ askClassification () {
 	echo -en "${BLUE_BACK}$spaces\r${NC}"	
 	read -p "$(echo -en "${LIGHT_BLUE_BACK}What classification (externalFactor/unchecked/without) ? ${BLUE_BACK}")" classification
 	echo -en "${NC}\033[T\033[2K\033[3J\r"
-	while [[ "$classification" != externalFactor && "$classification" != altogether && "$classification" != without ]]; do
+	while [[ "$classification" != externalFactor && "$classification" != unchecked && "$classification" != without ]]; do
 		echo -en "${RED_BACK}$spaces\r${NC}"
 		echo -en "${LIGHT_RED_BACK}Incorrect classification${NC}"
 		sleep 3
