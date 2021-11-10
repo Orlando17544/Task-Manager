@@ -26,8 +26,8 @@ LIGHT_RED_BACK='\033[1;41m'
 RED_BACK='\033[0;41m'
 
 readStorage() { 
-	tasks="$(grep -Po '^[^º]+' ~/bin/taskManagerData${fileName})"
-	nextId="$(grep -Po '\d+(?=º)' ~/bin/taskManagerData${fileName})"
+	tasks="$(grep -Po '^[^º]+' ~/bin/taskManagerData)"
+	nextId="$(grep -Po '\d+(?=º)' ~/bin/taskManagerData)"
 }
 
 updateData () {
@@ -100,9 +100,9 @@ printFrontend () {
 	local spacesTitle
 	#To change title
 	if [[ "${#previousIdsArray[@]}" -eq 0 ]]; then
-		numberSpacesTitle="$(((columns-${#fileName})/2))"
+		numberSpacesTitle="$(((columns-10)/2))"
 		spacesTitle="$(eval "for i in {1..${numberSpacesTitle}}; do printf "%1s" " "; done")"
-		printf "$spacesTitle${UNDERLINE}${BOLD}%-1s${NORMAL}${NOUNDERLINE}\n" "$fileName"
+		printf "$spacesTitle${UNDERLINE}${BOLD}%-1s${NORMAL}${NOUNDERLINE}\n" "Task Title"
 	else
 		numberSpacesTitle="$(((columns-${#currentTask})/2))"
 		spacesTitle="$(eval "for i in {1..${numberSpacesTitle}}; do printf "%1s" " "; done")"
@@ -647,18 +647,18 @@ create () {
 
 	local tasksNewModified="$(echo -n "$tasksNew" | perl -p -e 's/\$/\\\$/g' | perl -p -e 's/\\/\\\\/g')"
 
-	perl -p -i -e "s/\Q$tasks\E/$tasksNewModified/" ~/bin/taskManagerData${fileName}
+	perl -p -i -e "s/\Q$tasks\E/$tasksNewModified/" ~/bin/taskManagerData
 	tasks="$tasksNew"
 
 	#To know if there is only one id
-	grep -P 'ºid\^\d+º' ~/bin/taskManagerData${fileName} &> /dev/null
+	grep -P 'ºid\^\d+º' ~/bin/taskManagerData &> /dev/null
 
 	if [[ "$?" -eq 0 ]]; then
 		nextId="$((nextId+1))"
-		perl -p -i -e "s/(?<=ºid\^)\d+/$nextId/" ~/bin/taskManagerData${fileName}
+		perl -p -i -e "s/(?<=ºid\^)\d+/$nextId/" ~/bin/taskManagerData
 	elif [[ "$?" -eq 1 ]]; then
-		perl -p -i -e "s/\^\d+(?=º)//" ~/bin/taskManagerData${fileName}	
-		nextId="$(grep -Po '\d+(?=º)' ~/bin/taskManagerData${fileName})"
+		perl -p -i -e "s/\^\d+(?=º)//" ~/bin/taskManagerData
+		nextId="$(grep -Po '\d+(?=º)' ~/bin/taskManagerData)"
 	fi
 
 	if $emptyTasks; then
@@ -722,7 +722,7 @@ delete () {
 		IFS=$'\n' read -a recycledIdsArray -d '' <<< "$recycledIds"
 		#Recycle all ids
 		for recycledId in "${recycledIdsArray[@]}"; do
-			perl -p -i -e "s/(?<=\d)º/\^$recycledIdº/" ~/bin/taskManagerData${fileName}
+			perl -p -i -e "s/(?<=\d)º/\^$recycledIdº/" ~/bin/taskManagerData
 		done
 			
 		#To know if is in front
@@ -736,23 +736,23 @@ delete () {
 			if [[ "$?" -eq 0 ]]; then
 				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?:[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)ª"
 				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
-				perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 			#ª doesn't exist
 			elif [[ "$?" -eq 1 ]]; then
 				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?:[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)"
 				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
-				perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 			fi
 		#It's in the middle or back
 		elif [[ "$?" -eq 1 ]]; then
 			regex="ª$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)"
 			tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
-			perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+			perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 		fi
 	#It doesn't have subtasks
 	elif [[ "$?" -eq 1 ]]; then
 		#Recycle id
-		perl -p -i -e "s/(?<=\d)º/\^$idº/" ~/bin/taskManagerData${fileName}
+		perl -p -i -e "s/(?<=\d)º/\^$idº/" ~/bin/taskManagerData
 
 		#To know if is in front
 		echo -n "$tasks" | grep -P "[¦¬¤]$id\^" &> /dev/null
@@ -764,18 +764,18 @@ delete () {
 			if [[ "$?" -eq 0 ]]; then
 				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^ª]*ª"
 				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"	
-				perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 			#ª doesn't exist
 			elif [[ "$?" -eq 1 ]]; then
 				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤]*"
 				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
-				perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 			fi
 		#It's in the middle or back
 		elif [[ "$?" -eq 1 ]]; then
 			regex="ª$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*"
 			tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"	
-			perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+			perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 		fi
 	fi
 
@@ -834,7 +834,7 @@ modify () {
 	fi
 
 	tasks="$(echo -n "$tasks" | perl -p -e "s/$regex/$replacement/")"	
-	perl -p -i -e "s/$regex/$replacement/" ~/bin/taskManagerData${fileName}
+	perl -p -i -e "s/$regex/$replacement/" ~/bin/taskManagerData
 
 	updateData
 	printFrontend
@@ -872,20 +872,20 @@ move () {
 				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?:[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)ª"
 				taskToMove="$(echo -n "$tasks" | grep -Po "$regex" | perl -p -e 's/ª$//')"
 				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
-				perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 			#ª doesn't exist
 			elif [[ "$?" -eq 1 ]]; then
 				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?:[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)"
 				taskToMove="$(echo -n "$tasks" | grep -Po "$regex")"
 				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
-				perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 			fi
 		#It's in the middle or back
 		elif [[ "$?" -eq 1 ]]; then
 			regex="ª$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|[¦¬¤ª]|(?>(?1)))*⅛)"
 			taskToMove="$(echo -n "$tasks" | grep -Po "$regex" | perl -p -e 's/^ª//')"
 			tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
-			perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+			perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 		fi
 	#It doesn't have subtasks
 	elif [[ "$?" -eq 1 ]]; then
@@ -899,20 +899,20 @@ move () {
 				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^ª]*ª"
 				taskToMove="$(echo -n "$tasks" | grep -Po "$regex" | perl -p -e 's/ª$//')"
 				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"	
-				perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 			#ª doesn't exist
 			elif [[ "$?" -eq 1 ]]; then
 				regex="(?<=[¦¬¤])$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤]*"
 				taskToMove="$(echo -n "$tasks" | grep -Po "$regex")"
 				tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"
-				perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+				perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 			fi
 		#It's in the middle or back
 		elif [[ "$?" -eq 1 ]]; then
 			regex="ª$id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*"
 			taskToMove="$(echo -n "$tasks" | grep -Po "$regex" | perl -p -e 's/^ª//')"
 			tasks="$(echo -n "$tasks" | perl -p -e "s/$regex//")"	
-			perl -p -i -e "s/$regex//" ~/bin/taskManagerData${fileName}
+			perl -p -i -e "s/$regex//" ~/bin/taskManagerData
 		fi
 	fi
 
@@ -971,7 +971,7 @@ move () {
 
 	local tasksNewModified="$(echo -n "$tasksNew" | perl -p -e 's/\$/\\\$/g' | perl -p -e 's/\\/\\\\/g')"
 
-	perl -p -i -e "s/\Q$tasks\E/$tasksNewModified/" ~/bin/taskManagerData${fileName}
+	perl -p -i -e "s/\Q$tasks\E/$tasksNewModified/" ~/bin/taskManagerData
 	tasks="$tasksNew"
 
 	updateData
@@ -995,7 +995,7 @@ goTask () {
 	#It doesn't have subtasks
 	elif [[ "$?" -eq 1 ]]; then
 		tasks="½¦¦¬¬¤¤⅛"
-		perl -p -i -e "s/(?<=[¦¬¤ª])($id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*)([¦¬¤ª])/\1$tasks\2/" ~/bin/taskManagerData${fileName}
+		perl -p -i -e "s/(?<=[¦¬¤ª])($id\^\d+\^[^\^]+\^\w+\^[^¦¬¤ª]*)([¦¬¤ª])/\1$tasks\2/" ~/bin/taskManagerData
 		emptyTasks=true
 	fi
 
@@ -1005,7 +1005,7 @@ goTask () {
 
 goParent () {
 	if $emptyTasks; then
-		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData${fileName}
+		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData
 		emptyTasks=false
 	fi
 
@@ -1021,9 +1021,9 @@ goParent () {
 		
 		id="${previousIdsArray[$ultimateIndex]}"
 
-		tasks="$(grep -Po "(?<=[¦¬¤ª])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|(?1))*⅛)" ~/bin/taskManagerData${fileName} | grep -Po "½(?>[^½⅛]|(?R))*⅛")"
+		tasks="$(grep -Po "(?<=[¦¬¤ª])$id\^\d+\^[^\^]+\^\w+\^[^½]*(½(?>[^½⅛]|(?1))*⅛)" ~/bin/taskManagerData | grep -Po "½(?>[^½⅛]|(?R))*⅛")"
 		
-		currentTask="$(grep -Po "(?<=[¦¬¤ª])$id\^\d+\^[^\^]+\^" ~/bin/taskManagerData${fileName} | cut -f 3 -d '^')"
+		currentTask="$(grep -Po "(?<=[¦¬¤ª])$id\^\d+\^[^\^]+\^" ~/bin/taskManagerData | cut -f 3 -d '^')"
 	fi
 	
 	updateData
@@ -1032,7 +1032,7 @@ goParent () {
 
 goRoot() {
 	if $emptyTasks; then
-		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData${fileName}
+		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData
 		emptyTasks=false
 	fi
 
@@ -1045,7 +1045,7 @@ goRoot() {
 
 goDirectory () {
 	if $emptyTasks; then
-		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData${fileName}
+		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData
 		emptyTasks=false
 	fi
 }
@@ -1064,63 +1064,9 @@ update () {
 	printFrontend
 }
 
-showFiles () {
-	clear
-	fileNames="$(ls ~/bin | grep -P "taskManagerData" | perl -p -e 's/taskManagerData//g')"
-	IFS=$'\n' read -a fileNamesArray -d '' <<< "$fileNames"
-
-	printf "${BOLD}%-2s| %-15s${NORMAL}\n" Id Filename
-
-	local id=0
-
-	for fileName in "${fileNamesArray[@]}"; do
-		printf "%02d| %-15s\n" "$id" "$fileName"
-
-		id="$((id + 1))"
-	done
-
-	echo ""
-
-	correctId=false
-
-	while ! $correctId; do
-
-		read -p "What is the id of the file you want? " idSelected
-
-		if [[ "$idSelected" =~ ^[0-9]+$ && "$idSelected" -le "$id" ]]; then
-			correctId=true
-		fi
-
-	done
-
-	fileName="$(echo -n "${fileNamesArray[$idSelected]}")"
-}
-
-askFileName () {
-	clear
-	correctFileName=false
-	while ! $correctFileName; do
-		read -p "What is the name of the file you want? " fileName
-		if [[ "$fileName" =~ ^[A-Za-z0-9_]+$ ]]; then
-			correctFileName=true
-		fi
-		clear
-	done
-}
-
 atBeginning () {
-	if [[ "$(ls ~/bin)" =~ taskManagerData ]]; then
-
-		numberFiles="$(ls ~/bin | grep -Pc "taskManagerData")"
-
-		if [[ "$numberFiles" -eq 1 ]]; then
-			fileName="$(ls ~/bin | grep -P "taskManagerData" | perl -p -e 's/taskManagerData//g')"
-		else
-			showFiles
-		fi
-	else
-		askFileName
-		echo -n "½¦¦¬¬¤¤⅛ºid^0º" > ~/bin/taskManagerData${fileName}
+	if [[ ! -e ~/bin/taskManagerData ]]; then
+		echo -n "½¦¦¬¬¤¤⅛ºid^0º" > ~/bin/taskManagerData
 	fi
 
 	readStorage
@@ -1138,7 +1084,7 @@ visibleNote=false
 
 exitSIGINT () {
 	if $emptyTasks; then
-		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData${fileName}
+		perl -p -i -e 's/½¦¦¬¬¤¤⅛(?!º)//' ~/bin/taskManagerData
 		emptyTasks=false
 	fi
 	exit 0
